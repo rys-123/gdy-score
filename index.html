@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>干瞪眼计分器 Pro</title>
+    <!-- 资源引入 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.bootcdn.net/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #F8FAFC; padding-bottom: env(safe-area-inset-bottom); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        /* 皇冠呼吸动画 */
+        .crown-glow { animation: crown-pulse 2s infinite; }
+        @keyframes crown-pulse {
+            0% { filter: drop-shadow(0 0 2px rgba(255, 215, 0, 0.5)); transform: scale(1); }
+            50% { filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.9)); transform: scale(1.1); }
+            100% { filter: drop-shadow(0 0 2px rgba(255, 215, 0, 0.5)); transform: scale(1); }
+        }
+
+        /* 弹簧图标动画 */
+        .spring-checkbox:checked + div { background-color: #10B981; border-color: #10B981; color: white; }
+        .spring-checkbox:checked + div .leaf-icon { transform: scale(1.1) rotate(15deg); }
+        
+        /* 网格布局 */
+        .player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 0.5rem; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col max-w-lg mx-auto text-slate-800">
+
+    <!-- ================= 顶部卡片：排行榜与管理 ================= -->
+    <header class="px-4 pt-4 pb-2 relative z-10">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+            <!-- 标题栏 -->
+            <div class="flex justify-between items-center mb-4 border-b border-slate-50 pb-2">
+                <button onclick="app.togglePlayerMode()" id="manageBtn" class="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full active:scale-95 transition flex items-center hover:bg-slate-200">
+                    <i class="fas fa-users-cog mr-1"></i>管理
+                </button>
+                <h1 class="text-lg font-black tracking-tight text-slate-800 flex items-center">
+                    <span class="text-indigo-600 mr-1 text-xl">♠️</span>干瞪眼计分器
+                </h1>
+                <button onclick="app.toggleModal('helpModal', true)" class="text-slate-400 p-1 hover:text-indigo-600 transition"><i class="fas fa-circle-question text-xl"></i></button>
+            </div>
+            
+            <!-- 管理面板 (限制输入长度) -->
+            <div id="playerManagerPanel" class="hidden mb-4 p-3 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in">
+                <div class="flex space-x-2 mb-3">
+                    <input type="text" id="newPlayerName" maxlength="6" placeholder="玩家名(限6字)" class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <button onclick="app.addPlayer()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm active:bg-indigo-700">添加</button>
+                </div>
+                <div id="manageGrid" class="player-grid">
+                    <!-- JS 渲染 -->
+                </div>
+            </div>
+
+            <!-- 实时排行榜 -->
+            <div class="player-grid" id="topScoreGrid">
+                <!-- JS 渲染 -->
+            </div>
+        </div>
+    </header>
+
+    <!-- ================= 主内容区 ================= -->
+    <main class="flex-grow p-4 space-y-5">
+        
+        <!-- 结算录入卡片 -->
+        <section class="bg-white rounded-2xl shadow-xl shadow-slate-200/60 border border-slate-100 overflow-hidden">
+            <!-- 提示文案 -->
+            <div class="bg-indigo-600 px-4 py-3 flex justify-between items-center text-white">
+                <h2 class="font-bold text-sm flex items-center"><i class="fas fa-edit mr-2 text-indigo-200"></i>本局录入</h2>
+                <div class="text-[10px] font-mono bg-indigo-700 px-2 py-1 rounded text-indigo-100">输分 = 剩牌 × 2<sup>炸弹</sup> × (春天?2:1)</div>
+            </div>
+
+            <div class="p-4 space-y-5">
+                <!-- 输入列表 -->
+                <div id="inputList" class="space-y-3"></div>
+                
+                <!-- 炸弹设置 -->
+                <div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <span class="text-sm font-bold text-slate-600 flex items-center"><i class="fas fa-bomb mr-2 text-slate-400"></i>炸弹总数</span>
+                    <div class="flex items-center space-x-4">
+                        <button onclick="app.adjustBomb(-1)" class="w-10 h-10 rounded-full bg-white border border-slate-200 text-slate-600 flex items-center justify-center shadow-sm text-lg font-bold active:bg-slate-100">-</button>
+                        <span id="bombCount" class="text-2xl font-black text-indigo-600 w-6 text-center">0</span>
+                        <button onclick="app.adjustBomb(1)" class="w-10 h-10 rounded-full bg-white border border-slate-200 text-slate-600 flex items-center justify-center shadow-sm text-lg font-bold active:bg-slate-100">+</button>
+                    </div>
+                </div>
+
+                <!-- 结算按钮 -->
+                <button onclick="app.submitRound()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-lg font-bold py-3.5 rounded-xl shadow-lg shadow-indigo-200 active:scale-[0.98] transition-all flex items-center justify-center">
+                    <i class="fas fa-check-circle mr-2"></i> 确认结算
+                </button>
+            </div>
+        </section>
+
+        <!-- 最终结算入口 -->
+        <div class="px-1">
+            <button onclick="app.showFinalResult()" class="w-full bg-white border-2 border-indigo-100 text-indigo-600 hover:bg-indigo-50 py-3 rounded-xl font-bold text-sm flex items-center justify-center shadow-sm active:opacity-90 transition">
+                <i class="fas fa-flag-checkered mr-2"></i> 最终结算 (查看排名)
+            </button>
+        </div>
+
+        <!-- 历史记录 -->
+        <section class="pb-6">
+            <div class="flex justify-between items-center mb-3 px-1">
+                <h3 class="font-bold text-slate-700 text-sm">对局流水</h3>
+                <span id="historyCount" class="text-[10px] bg-slate-200 px-2 py-0.5 rounded text-slate-500">0 局</span>
+            </div>
+            <div id="historyList" class="space-y-3"></div>
+        </section>
+    </main>
+
+    <!-- ================= 最终结算模态框 ================= -->
+    <div id="finalModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-900/95 backdrop-blur-sm" onclick="app.toggleModal('finalModal', false)"></div>
+        <div class="relative w-full max-w-sm bg-white rounded-2xl overflow-hidden shadow-2xl transform transition-all scale-100">
+            <!-- 头部 -->
+            <div class="bg-indigo-600 p-6 text-center text-white relative overflow-hidden">
+                <div class="relative z-10">
+                    <i class="fas fa-trophy text-4xl text-yellow-300 mb-2 drop-shadow-md"></i>
+                    <h2 class="text-xl font-black tracking-widest">最终排名</h2>
+                </div>
+            </div>
+
+            <!-- 列表 -->
+            <div class="max-h-[60vh] overflow-y-auto p-4 bg-slate-50 space-y-2" id="finalList">
+                <!-- JS 渲染 -->
+            </div>
+
+            <!-- 底部按钮 -->
+            <div class="p-4 bg-white border-t border-slate-100 flex space-x-3">
+                <button onclick="app.toggleModal('finalModal', false)" class="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">返回</button>
+                <button onclick="app.resetScores(); app.toggleModal('finalModal', false);" class="flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold text-sm">新开一局</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 帮助与规则模态框 -->
+    <div id="helpModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onclick="app.toggleModal('helpModal', false)"></div>
+        <div class="relative w-full max-w-sm bg-white rounded-2xl overflow-hidden shadow-xl max-h-[80vh] overflow-y-auto">
+            <div class="bg-slate-50 p-4 border-b border-slate-100 flex justify-between items-center sticky top-0">
+                <h3 class="font-bold text-lg text-slate-800">帮助与说明</h3>
+                <button onclick="app.toggleModal('helpModal', false)" class="text-slate-400 p-1"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div class="p-5 space-y-6">
+                <!-- 规则说明 -->
+                <div class="text-sm text-slate-600">
+                    <h4 class="font-black text-slate-800 mb-2 border-l-4 border-indigo-500 pl-2">计分规则</h4>
+                    <ul class="list-disc list-inside space-y-1 ml-1 text-xs">
+                        <li>基础分 = 剩余牌数。</li>
+                        <li><strong>牌数限制</strong>：0-6张。每局每人抓牌5张，先出牌者多抓1张。</li>
+                        <li><strong>春天</strong>：输家一张未出（扣分翻倍）。</li>
+                        <li><strong>炸弹</strong>：每1个炸弹，所有输家扣分 ×2。</li>
+                        <li>赢家得分 = 所有输家扣分总和。</li>
+                    </ul>
+                </div>
+
+                <!-- 操作指南 -->
+                <div class="text-sm text-slate-600">
+                    <h4 class="font-black text-slate-800 mb-2 border-l-4 border-green-500 pl-2">操作指南</h4>
+                    <ul class="space-y-2 text-xs">
+                        <li><span class="font-bold text-slate-700">① 赢家：</span> 剩0张，输入框<strong>留空</strong>即可。</li>
+                        <li><span class="font-bold text-slate-700">② 自动春天：</span> 输家牌数 ≥ 5 时自动标记春天（可手动取消）。</li>
+                        <li><span class="font-bold text-slate-700">③ 炸弹：</span> 在底部调整本局炸弹总数。</li>
+                    </ul>
+                </div>
+
+                <!-- 二维码 -->
+                <div class="flex flex-col items-center pt-2 border-t border-slate-100">
+                    <div id="qrcode" class="p-2 border rounded-lg bg-white mb-2"></div>
+                    <p class="text-[10px] text-slate-400">RYS 制作</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-slate-800/90 text-white px-6 py-4 rounded-xl shadow-2xl opacity-0 transition-opacity duration-300 z-[70] pointer-events-none text-sm font-bold flex flex-col items-center text-center">
+        <i class="fas fa-exclamation-circle text-2xl mb-2 text-yellow-400"></i>
+        <span id="toastMsg">提示</span>
+    </div>
+
+    <script>
+        const app = (() => {
+            const STORAGE_KEY = 'gdy_v9_auto_spring';
+            let state = {
+                players: [{id:1, name:'玩家A', score:0}, {id:2, name:'玩家B', score:0}, {id:3, name:'玩家C', score:0}],
+                history: [], bombs: 0, isManageMode: false
+            };
+
+            const init = () => { load(); renderAll(); registerSW(); };
+            const save = () => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); renderAll(); };
+            const load = () => { const s = localStorage.getItem(STORAGE_KEY); if(s) state = JSON.parse(s); };
+
+            // --- 自动春天判定逻辑 ---
+            const checkSpring = (el) => {
+                const val = parseInt(el.value);
+                const pid = el.dataset.id;
+                const checkbox = document.querySelector(`.spring-checkbox[data-id="${pid}"]`);
+                if(checkbox) {
+                    // 如果牌数 >= 5，自动勾选春天；否则取消勾选
+                    // 用户仍可手动覆盖，但下次修改数字会再次触发此逻辑
+                    checkbox.checked = !isNaN(val) && val >= 5;
+                }
+            };
+
+            // --- 最终结算 ---
+            const showFinalResult = () => {
+                const sorted = [...state.players].sort((a, b) => b.score - a.score);
+                const list = document.getElementById('finalList');
+                
+                list.innerHTML = sorted.map((p, i) => {
+                    let rankHtml = `<span class="text-slate-400 font-bold w-6 text-center">${i+1}</span>`;
+                    let scoreClass = p.score > 0 ? "text-red-600" : (p.score < 0 ? "text-green-600" : "text-slate-400");
+                    let containerClass = "bg-white border-slate-100";
+                    
+                    if (i === 0) {
+                        rankHtml = `<i class="fas fa-crown text-yellow-400 text-xl crown-glow"></i>`;
+                        containerClass = "bg-yellow-50 border-yellow-200 ring-1 ring-yellow-200";
+                    }
+
+                    return `
+                    <div class="flex items-center p-3 rounded-xl border ${containerClass} mb-2 shadow-sm">
+                        <div class="w-10 flex justify-center mr-2">${rankHtml}</div>
+                        <div class="flex-1">
+                            <span class="font-bold text-slate-800 text-sm block">${p.name}</span>
+                        </div>
+                        <div class="font-mono font-black text-lg ${scoreClass}">${p.score > 0 ? '+' : ''}${p.score}</div>
+                    </div>`;
+                }).join('');
+                
+                toggleModal('finalModal', true);
+            };
+
+            // --- 结算逻辑 ---
+            const submitRound = () => {
+                const inputs = document.querySelectorAll('.card-input');
+                const checks = document.querySelectorAll('.spring-input');
+                let winnerId = null, zeroCount = 0, sixCount = 0, roundData = [];
+
+                for (let i = 0; i < inputs.length; i++) {
+                    const pid = parseInt(inputs[i].dataset.id);
+                    const val = inputs[i].value === '' ? 0 : parseInt(inputs[i].value);
+                    
+                    if (isNaN(val) || val < 0) return toast('输入无效');
+                    
+                    if (val > 6) return toast(`牌数不能超过6张`);
+                    if (val === 6) sixCount++;
+                    
+                    if (val === 0) { 
+                        winnerId = pid; 
+                        zeroCount++; 
+                        if(checks[i].checked) return toast('赢家不能被春天'); 
+                    }
+                    roundData.push({ id: pid, val, spring: checks[i].checked });
+                }
+
+                if (zeroCount !== 1) return toast('必须有一位赢家(0张)');
+                if (sixCount > 1) return toast('最多只能有一位玩家剩6张牌');
+
+                const bombM = Math.pow(2, state.bombs);
+                let winSum = 0;
+                const changes = {};
+
+                roundData.forEach(d => {
+                    if (d.id !== winnerId) {
+                        const loss = d.val * bombM * (d.spring ? 2 : 1);
+                        changes[d.id] = -loss;
+                        winSum += loss;
+                        state.players.find(p => p.id === d.id).score -= loss;
+                    }
+                });
+                changes[winnerId] = winSum;
+                state.players.find(p => p.id === winnerId).score += winSum;
+
+                state.history.unshift({ round: state.history.length + 1, time: Date.now(), winnerId, bombs: state.bombs, scores: changes, details: roundData });
+                state.bombs = 0;
+                document.getElementById('bombCount').textContent = '0';
+                save();
+                toast(`结算成功 赢家+${winSum}`);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            // --- 玩家管理 ---
+            const togglePlayerMode = () => { state.isManageMode = !state.isManageMode; document.getElementById('playerManagerPanel').classList.toggle('hidden'); renderAll(); };
+            
+            const addPlayer = () => {
+                const n = document.getElementById('newPlayerName').value.trim();
+                if(!n) return toast('请输入名字');
+                if(n.length > 6) return toast('名字最多6个字');
+                if(state.players.some(p => p.name === n)) return toast('名字已存在');
+                
+                state.players.push({id: Date.now(), name: n, score: 0});
+                document.getElementById('newPlayerName').value = '';
+                save();
+            };
+            
+            const removePlayer = (id) => { if(state.players.length <= 2) return toast('至少2人'); if(confirm('删除玩家？')) { state.players = state.players.filter(p => p.id !== id); save(); }};
+            
+            const updateName = (id) => { 
+                const p = state.players.find(p => p.id === id); 
+                let n = prompt('修改名字 (最多6字)', p.name); 
+                if(n) {
+                    n = n.trim().substring(0, 6);
+                    if(!n) return;
+                    if(state.players.some(curr => curr.name === n && curr.id !== id)) return toast('名字已存在');
+                    p.name = n; 
+                    save(); 
+                }
+            };
+            
+            const toggleModal = (id, show) => { 
+                document.getElementById(id).classList.toggle('hidden', !show);
+                if(id==='helpModal' && show) setTimeout(() => {
+                    const c = document.getElementById('qrcode'); c.innerHTML=''; new QRCode(c,{text:window.location.href,width:80,height:80});
+                }, 100);
+            };
+            const resetScores = () => { if(confirm('重置所有分数？')) { state.players.forEach(p => p.score = 0); state.history = []; save(); toast('已重置'); }};
+
+            // --- 渲染 ---
+            const renderAll = () => {
+                const topGrid = document.getElementById('topScoreGrid');
+                const max = state.history.length ? Math.max(...state.players.map(p=>p.score)) : null;
+                
+                topGrid.innerHTML = state.players.map(p => `
+                    <div class="bg-white border ${p.score === max && p.score !== 0 ? 'border-yellow-400 bg-yellow-50' : 'border-slate-100'} p-2 rounded-lg text-center shadow-sm relative flex flex-col justify-center min-h-[60px]">
+                        <div class="text-xs font-bold text-slate-500 truncate w-full mb-1" onclick="app.updateName(${p.id})">${p.name}</div>
+                        <div class="font-mono font-black ${p.score >= 0 ? 'text-red-500' : 'text-green-600'} text-lg leading-none">${p.score > 0 ? '+' : ''}${p.score}</div>
+                    </div>`).join('');
+
+                document.getElementById('manageGrid').innerHTML = state.players.map(p => `
+                    <div class="bg-white p-2 rounded border border-slate-200 flex flex-col items-center">
+                        <span class="text-xs font-bold truncate w-full text-center mb-1">${p.name}</span>
+                        <button onclick="app.removePlayer(${p.id})" class="text-red-500 text-xs bg-red-50 px-2 py-1 rounded w-full">删除</button>
+                    </div>`).join('');
+
+                // 渲染输入列表 (增加 oninput 触发自动春天)
+                document.getElementById('inputList').innerHTML = state.players.map(p => `
+                    <div class="flex items-center space-x-3">
+                        <div class="w-16 text-xs font-bold text-slate-500 text-right truncate">${p.name}</div>
+                        <div class="flex-1 flex h-12 bg-white rounded-xl border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
+                            <label class="w-12 border-r border-slate-100 bg-slate-50 flex items-center justify-center cursor-pointer hover:bg-slate-100" title="春天">
+                                <input type="checkbox" class="spring-checkbox spring-input sr-only" data-id="${p.id}">
+                                <div class="w-full h-full flex items-center justify-center text-slate-300 transition-colors"><i class="fas fa-seedling leaf-icon"></i></div>
+                            </label>
+                            <input type="number" pattern="[0-9]*" inputmode="numeric" max="6" oninput="app.checkSpring(this)" class="card-input flex-1 px-4 text-center font-black text-slate-800 placeholder-slate-200 outline-none text-lg" placeholder="空=0" data-id="${p.id}">
+                        </div>
+                    </div>`).join('');
+
+                const hList = document.getElementById('historyList');
+                document.getElementById('historyCount').textContent = `${state.history.length} 局`;
+                hList.innerHTML = state.history.map(h => {
+                    const wName = state.players.find(p=>p.id===h.winnerId)?.name || '??';
+                    const bombTag = h.bombs > 0 ? `<span class="ml-2 bg-red-50 text-red-500 text-[10px] px-1.5 py-0.5 rounded font-bold border border-red-100"><i class="fas fa-bomb"></i> ${h.bombs}</span>` : '';
+                    
+                    const scores = state.players.map(p => {
+                        const s = h.scores[p.id]; if(s===undefined) return '';
+                        const spr = h.details.find(d=>d.id===p.id)?.spring;
+                        return `<div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400 truncate w-16">${p.name} ${spr?'🌱':''}</span><span class="font-mono font-bold ${s>=0?'text-red-500':'text-green-600'}">${s>0?'+':''}${s}</span></div>`;
+                    }).join('');
+                    
+                    return `
+                    <div class="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                        <div class="flex items-center mb-2 pb-2 border-b border-slate-50">
+                            <span class="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 rounded mr-2">#${h.round}</span>
+                            <span class="text-xs font-bold text-slate-700 flex items-center"><i class="fas fa-crown text-yellow-500 mr-1"></i>${wName}</span>
+                            ${bombTag}
+                            <span class="text-[10px] text-slate-300 font-mono ml-auto">${new Date(h.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-x-2 gap-y-1">${scores}</div>
+                    </div>`;
+                }).join('');
+            };
+
+            const toast = (m) => {
+                const t = document.getElementById('toast');
+                document.getElementById('toastMsg').textContent = m;
+                t.classList.replace('opacity-0', 'opacity-100');
+                setTimeout(() => t.classList.replace('opacity-100', 'opacity-0'), 2000);
+            };
+
+            const registerSW = () => { if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{}); };
+
+            return { init, addPlayer, removePlayer, updateName, adjustBomb: (d) => { state.bombs = Math.max(0, state.bombs+d); document.getElementById('bombCount').textContent = state.bombs; }, submitRound, resetScores, showFinalResult, togglePlayerMode, toggleModal, checkSpring };
+        })();
+        window.addEventListener('DOMContentLoaded', app.init);
+    </script>
+</body>
+</html>
