@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>干瞪眼计分器</title>
+    <title>干瞪眼计分器 Pro</title>
     <!-- 资源引入 -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <script src="https://cdn.bootcdn.net/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="icon" type="image/png" href="./icon-192.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.bootcdn.net/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #F8FAFC; padding-bottom: env(safe-area-inset-bottom); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -47,14 +48,28 @@
                 <button onclick="app.toggleModal('helpModal', true)" class="text-slate-400 p-1 hover:text-indigo-600 transition"><i class="fas fa-circle-question text-xl"></i></button>
             </div>
             
-            <!-- 管理面板 (限制输入长度) -->
+            <!-- 管理面板 -->
             <div id="playerManagerPanel" class="hidden mb-4 p-3 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in">
+                <!-- 添加玩家 -->
                 <div class="flex space-x-2 mb-3">
                     <input type="text" id="newPlayerName" maxlength="6" placeholder="玩家名(限6字)" class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
                     <button onclick="app.addPlayer()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm active:bg-indigo-700">添加</button>
                 </div>
-                <div id="manageGrid" class="player-grid">
+                
+                <!-- 玩家列表 -->
+                <div id="manageGrid" class="player-grid mb-2">
                     <!-- JS 渲染 -->
+                </div>
+                <div class="text-[10px] text-slate-400 text-center mb-3">提示：点击分数可手动修正</div>
+
+                <!-- 全局操作区 -->
+                <div class="pt-3 border-t border-slate-200 grid grid-cols-2 gap-3">
+                    <button onclick="app.resetScores()" class="flex items-center justify-center py-2 rounded-lg text-xs font-bold text-orange-600 bg-orange-50 border border-orange-100 hover:bg-orange-100 active:scale-95 transition">
+                        <i class="fas fa-redo-alt mr-1.5"></i> 重置比分 (保留玩家)
+                    </button>
+                    <button onclick="app.clearAllData()" class="flex items-center justify-center py-2 rounded-lg text-xs font-bold text-red-600 bg-red-50 border border-red-100 hover:bg-red-100 active:scale-95 transition">
+                        <i class="fas fa-trash-alt mr-1.5"></i> 清空所有数据
+                    </button>
                 </div>
             </div>
 
@@ -134,7 +149,7 @@
             <!-- 底部按钮 -->
             <div class="p-4 bg-white border-t border-slate-100 flex space-x-3">
                 <button onclick="app.toggleModal('finalModal', false)" class="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">返回</button>
-                <button onclick="app.resetScores(); app.toggleModal('finalModal', false);" class="flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold text-sm">新开一局</button>
+                <button onclick="app.resetScores(); app.toggleModal('finalModal', false);" class="flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold text-sm">开启新比赛</button>
             </div>
         </div>
     </div>
@@ -166,8 +181,8 @@
                     <h4 class="font-black text-slate-800 mb-2 border-l-4 border-green-500 pl-2">操作指南</h4>
                     <ul class="space-y-2 text-xs">
                         <li><span class="font-bold text-slate-700">① 赢家：</span> 剩0张，输入框<strong>留空</strong>即可。</li>
-                        <li><span class="font-bold text-slate-700">② 自动春天：</span> 输家牌数 ≥ 5 时自动标记春天（可手动取消）。</li>
-                        <li><span class="font-bold text-slate-700">③ 炸弹：</span> 在底部调整本局炸弹总数。</li>
+                        <li><span class="font-bold text-slate-700">② 自动春天：</span> 输家牌数 ≥ 5 时自动标记春天。</li>
+                        <li><span class="font-bold text-slate-700">③ 管理：</span> 点击管理可修改总分、或清空所有数据。</li>
                     </ul>
                 </div>
 
@@ -189,8 +204,15 @@
     <script>
         const app = (() => {
             const STORAGE_KEY = 'gdy_v9_auto_spring';
+            // 优化：初始玩家增加到4人
+            const DEFAULT_PLAYERS = [
+                {id:1, name:'玩家A', score:0}, 
+                {id:2, name:'玩家B', score:0}, 
+                {id:3, name:'玩家C', score:0},
+                {id:4, name:'玩家D', score:0}
+            ];
             let state = {
-                players: [{id:1, name:'玩家A', score:0}, {id:2, name:'玩家B', score:0}, {id:3, name:'玩家C', score:0}],
+                players: JSON.parse(JSON.stringify(DEFAULT_PLAYERS)),
                 history: [], bombs: 0, isManageMode: false
             };
 
@@ -204,8 +226,6 @@
                 const pid = el.dataset.id;
                 const checkbox = document.querySelector(`.spring-checkbox[data-id="${pid}"]`);
                 if(checkbox) {
-                    // 如果牌数 >= 5，自动勾选春天；否则取消勾选
-                    // 用户仍可手动覆盖，但下次修改数字会再次触发此逻辑
                     checkbox.checked = !isNaN(val) && val >= 5;
                 }
             };
@@ -314,6 +334,18 @@
                     save(); 
                 }
             };
+
+            const editScore = (id) => {
+                const p = state.players.find(p => p.id === id);
+                const input = prompt(`修改 [${p.name}] 的总分:\n请输入整数 (例如: 10, -5, 0)`, p.score);
+                if (input === null) return;
+                if (!/^-?\d+$/.test(input.trim())) {
+                    return toast('格式错误：请输入整数');
+                }
+                p.score = parseInt(input.trim(), 10);
+                save();
+                toast('分数已修正');
+            };
             
             const toggleModal = (id, show) => { 
                 document.getElementById(id).classList.toggle('hidden', !show);
@@ -321,7 +353,34 @@
                     const c = document.getElementById('qrcode'); c.innerHTML=''; new QRCode(c,{text:window.location.href,width:80,height:80});
                 }, 100);
             };
-            const resetScores = () => { if(confirm('重置所有分数？')) { state.players.forEach(p => p.score = 0); state.history = []; save(); toast('已重置'); }};
+
+            // 重置比分 (保留玩家)
+            const resetScores = () => { 
+                if(confirm('确定要开启新比赛吗？\n当前比分和对局记录将被清空，但保留玩家。')) { 
+                    state.players.forEach(p => p.score = 0); 
+                    state.history = []; 
+                    state.bombs = 0;
+                    document.getElementById('bombCount').textContent = '0';
+                    save(); 
+                    toast('已开启新比赛'); 
+                }
+            };
+
+            // 清空所有数据 (恢复出厂)
+            const clearAllData = () => {
+                if(confirm('⚠️ 警告：此操作将删除所有玩家、比分和历史记录，恢复到4人初始状态！\n\n确定要清空吗？')) {
+                    const wasManageMode = state.isManageMode;
+                    state = {
+                        players: JSON.parse(JSON.stringify(DEFAULT_PLAYERS)),
+                        history: [], 
+                        bombs: 0,
+                        isManageMode: wasManageMode 
+                    };
+                    document.getElementById('bombCount').textContent = '0';
+                    save();
+                    toast('所有数据已清空');
+                }
+            }
 
             // --- 渲染 ---
             const renderAll = () => {
@@ -335,12 +394,15 @@
                     </div>`).join('');
 
                 document.getElementById('manageGrid').innerHTML = state.players.map(p => `
-                    <div class="bg-white p-2 rounded border border-slate-200 flex flex-col items-center">
-                        <span class="text-xs font-bold truncate w-full text-center mb-1">${p.name}</span>
-                        <button onclick="app.removePlayer(${p.id})" class="text-red-500 text-xs bg-red-50 px-2 py-1 rounded w-full">删除</button>
+                    <div class="bg-white p-2 rounded border border-slate-200 flex flex-col items-center gap-1.5">
+                        <span class="text-xs font-bold truncate w-full text-center">${p.name}</span>
+                        <button onclick="app.editScore(${p.id})" class="text-indigo-600 font-mono font-bold text-xs bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded w-full border border-indigo-100 flex items-center justify-center">
+                            ${p.score > 0 ? '+' : ''}${p.score} <i class="fas fa-pen text-[10px] ml-1 opacity-50"></i>
+                        </button>
+                        <button onclick="app.removePlayer(${p.id})" class="text-red-500 text-xs bg-red-50 hover:bg-red-100 px-2 py-1 rounded w-full border border-red-100">删除</button>
                     </div>`).join('');
 
-                // 渲染输入列表 (增加 oninput 触发自动春天)
+                // 渲染输入列表
                 document.getElementById('inputList').innerHTML = state.players.map(p => `
                     <div class="flex items-center space-x-3">
                         <div class="w-16 text-xs font-bold text-slate-500 text-right truncate">${p.name}</div>
@@ -365,6 +427,7 @@
                         return `<div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400 truncate w-16">${p.name} ${spr?'🌱':''}</span><span class="font-mono font-bold ${s>=0?'text-red-500':'text-green-600'}">${s>0?'+':''}${s}</span></div>`;
                     }).join('');
                     
+                    // 优化：将 gap-x-2 改为 gap-x-4，并将 cols-3 改为 cols-2，以便在4人时显示更工整(2x2)
                     return `
                     <div class="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
                         <div class="flex items-center mb-2 pb-2 border-b border-slate-50">
@@ -373,7 +436,7 @@
                             ${bombTag}
                             <span class="text-[10px] text-slate-300 font-mono ml-auto">${new Date(h.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>
                         </div>
-                        <div class="grid grid-cols-3 gap-x-2 gap-y-1">${scores}</div>
+                        <div class="grid grid-cols-2 gap-x-4 gap-y-1">${scores}</div>
                     </div>`;
                 }).join('');
             };
@@ -387,12 +450,9 @@
 
             const registerSW = () => { if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{}); };
 
-            return { init, addPlayer, removePlayer, updateName, adjustBomb: (d) => { state.bombs = Math.max(0, state.bombs+d); document.getElementById('bombCount').textContent = state.bombs; }, submitRound, resetScores, showFinalResult, togglePlayerMode, toggleModal, checkSpring };
+            return { init, addPlayer, removePlayer, updateName, editScore, adjustBomb: (d) => { state.bombs = Math.max(0, state.bombs+d); document.getElementById('bombCount').textContent = state.bombs; }, submitRound, resetScores, clearAllData, showFinalResult, togglePlayerMode, toggleModal, checkSpring };
         })();
         window.addEventListener('DOMContentLoaded', app.init);
     </script>
 </body>
-
 </html>
-
-
